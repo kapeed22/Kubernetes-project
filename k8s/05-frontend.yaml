@@ -27,6 +27,6 @@ spec:
     spec:
       containers:
       - name: frontend
-        image: ghcr.io/YOUR_GITHUB_USERNAME/k8s-frontend:latest
+        image: ghcr.io/kapeed22/k8s-frontend:latest
         ports:
         - containerPort: 80
