@@ -5,6 +5,7 @@ metadata:
 spec:
   ports:
   - port: 5432
+    targetPort: 5432
   selector:
     app: postgres
 ---
@@ -30,6 +31,8 @@ spec:
           value: postgrespass
         - name: POSTGRES_DB
           value: authdb
+        - name: PGDATA
+          value: /var/lib/postgresql/data/pgdata
         ports:
         - containerPort: 5432
         volumeMounts:
