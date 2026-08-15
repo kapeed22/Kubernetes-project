@@ -58,6 +58,8 @@ jobs:
         run: |
           SCRIPT=$(cat << 'EOF'
           set -e
+          export KUBECONFIG=/etc/kubernetes/admin.conf
+          
           cd /home/ubuntu/k8s-3tier-auth-app || git clone https://github.com/${{ github.repository }}.git /home/ubuntu/k8s-3tier-auth-app
           cd /home/ubuntu/k8s-3tier-auth-app
           git pull origin main
