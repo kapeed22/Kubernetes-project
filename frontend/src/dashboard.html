@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Dashboard</title>
+  <style>body { font-family: Arial, sans-serif; margin: 50px; }</style>
+</head>
+<body>
+  <h1 id="welcome">Verifying Session via Redis...</h1>
+  <p id="source"></p>
+  <button onclick="logout()">Logout</button>
+
+  <script>
+    async function checkSession() {
+      const sid = localStorage.getItem('sessionId');
+      if(!sid) { window.location.href = '/'; return; }
+
+      const res = await fetch('/api/me', {
+        headers: { 'Authorization': sid }
+      });
+      if(res.ok) {
+        const data = await res.json();
+        document.getElementById('welcome').innerText = `Hello ${data.user.username}, you are logged in!`;
+        document.getElementById('source').innerText = `Session source: ${data.source}`;
+      } else {
+        localStorage.removeItem('sessionId');
+        window.location.href = '/';
+      }
+    }
+
+    function logout() {
+      localStorage.removeItem('sessionId');
+      window.location.href = '/';
+    }
+
+    checkSession();
+  </script>
+</body>
+</html>
