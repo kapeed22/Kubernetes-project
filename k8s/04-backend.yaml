@@ -29,7 +29,11 @@ spec:
         ports:
         - containerPort: 5000
         env:
-        - name: DB_HOST
-          value: db-service
-        - name: REDIS_HOST
-          value: redis-service
+          - name: DB_HOST
+            value: "db-service.default.svc.cluster.local"
+          - name: DB_PORT
+            value: "5432"
+          - name: REDIS_HOST
+            value: "redis-service.default.svc.cluster.local"  # Or check your actual redis service name
+          - name: REDIS_PORT
+            value: "6379"
