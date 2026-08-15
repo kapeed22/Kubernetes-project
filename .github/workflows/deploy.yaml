@@ -1,8 +1,13 @@
-name: CI/CD Pipeline to K8s
+name: CI/CD Pipeline to K8s via AWS OIDC & SSM
 
 on:
   push:
     branches: [ "main" ]
+
+permissions:
+  id-token: write
+  contents: read
+  packages: write
 
 env:
   REGISTRY: ghcr.io
@@ -12,10 +17,6 @@ env:
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
-
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v3
@@ -47,18 +48,42 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v3
 
-      - name: Deploy to K8s Cluster via SSH
-        uses: appleboy/ssh-action@v1.0.0
+      - name: Authenticate with AWS via OIDC
+        uses: aws-actions/configure-aws-credentials@v4
         with:
-          host: ${{ secrets.K8S_MASTER_IP }}
-          username: ubuntu
-          key: ${{ secrets.K8S_SSH_KEY }}
-          script: |
-            # Update image tags in manifests dynamically
-            sed -i 's|ghcr.io/YOUR_GITHUB_USERNAME/k8s-backend:latest|${{ env.IMAGE_BACKEND }}:${{ github.sha }}|g' k8s/04-backend.yaml
-            sed -i 's|ghcr.io/YOUR_GITHUB_USERNAME/k8s-frontend:latest|${{ env.IMAGE_FRONTEND }}:${{ github.sha }}|g' k8s/05-frontend.yaml
-            
-            # Apply updated manifests
-            kubectl apply -f k8s/
-            kubectl rollout status deployment/backend-deployment
-            kubectl rollout status deployment/frontend-deployment
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Execute Deployment on K8s Master via AWS SSM
+        run: |
+          COMMANDS=$(cat << 'EOF'
+          set -e
+          cd /home/ubuntu/k8s-3tier-auth-app || git clone https://github.com/${{ github.repository }}.git /home/ubuntu/k8s-3tier-auth-app
+          cd /home/ubuntu/k8s-3tier-auth-app
+          git pull origin main
+
+          sed -i 's|ghcr.io/YOUR_GITHUB_USERNAME/k8s-backend:latest|${{ env.IMAGE_BACKEND }}:${{ github.sha }}|g' k8s/04-backend.yaml
+          sed -i 's|ghcr.io/YOUR_GITHUB_USERNAME/k8s-frontend:latest|${{ env.IMAGE_FRONTEND }}:${{ github.sha }}|g' k8s/05-frontend.yaml
+
+          kubectl apply -f k8s/
+          kubectl rollout status deployment/backend-deployment
+          kubectl rollout status deployment/frontend-deployment
+          EOF
+          )
+
+          COMMAND_ID=$(aws ssm send-command \
+            --instance-ids "${{ secrets.K8S_MASTER_INSTANCE_ID }}" \
+            --document-name "AWS-RunShellScript" \
+            --parameters "commands=[$(echo "$COMMANDS" | jq -R -s '.')] " \
+            --query "Command.CommandId" --output text)
+
+          echo "Sent SSM Command ID: $COMMAND_ID"
+
+          aws ssm wait command-executed \
+            --command-id "$COMMAND_ID" \
+            --instance-id "${{ secrets.K8S_MASTER_INSTANCE_ID }}"
+
+          aws ssm get-command-invocation \
+            --command-id "$COMMAND_ID" \
+            --instance-id "${{ secrets.K8S_MASTER_INSTANCE_ID }}" \
+            --query "StandardOutputContent" --output text
