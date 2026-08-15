@@ -25,7 +25,7 @@ spec:
     spec:
       containers:
       - name: backend
-        image: ghcr.io/YOUR_GITHUB_USERNAME/k8s-backend:latest
+        image: ghcr.io/kapeed22/k8s-backend:latest
         ports:
         - containerPort: 5000
         env:
