@@ -1,0 +1,64 @@
+name: CI/CD Pipeline to K8s
+
+on:
+  push:
+    branches: [ "main" ]
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_BACKEND: ghcr.io/${{ github.repository_owner }}/k8s-backend
+  IMAGE_FRONTEND: ghcr.io/${{ github.repository_owner }}/k8s-frontend
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v2
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build & Push Backend Image
+        run: |
+          docker build -t ${{ env.IMAGE_BACKEND }}:${{ github.sha }} -t ${{ env.IMAGE_BACKEND }}:latest ./backend
+          docker push ${{ env.IMAGE_BACKEND }}:${{ github.sha }}
+          docker push ${{ env.IMAGE_BACKEND }}:latest
+
+      - name: Build & Push Frontend Image
+        run: |
+          docker build -t ${{ env.IMAGE_FRONTEND }}:${{ github.sha }} -t ${{ env.IMAGE_FRONTEND }}:latest ./frontend
+          docker push ${{ env.IMAGE_FRONTEND }}:${{ github.sha }}
+          docker push ${{ env.IMAGE_FRONTEND }}:latest
+
+  deploy-to-cluster:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v3
+
+      - name: Deploy to K8s Cluster via SSH
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.K8S_MASTER_IP }}
+          username: ubuntu
+          key: ${{ secrets.K8S_SSH_KEY }}
+          script: |
+            # Update image tags in manifests dynamically
+            sed -i 's|ghcr.io/YOUR_GITHUB_USERNAME/k8s-backend:latest|${{ env.IMAGE_BACKEND }}:${{ github.sha }}|g' k8s/04-backend.yaml
+            sed -i 's|ghcr.io/YOUR_GITHUB_USERNAME/k8s-frontend:latest|${{ env.IMAGE_FRONTEND }}:${{ github.sha }}|g' k8s/05-frontend.yaml
+            
+            # Apply updated manifests
+            kubectl apply -f k8s/
+            kubectl rollout status deployment/backend-deployment
+            kubectl rollout status deployment/frontend-deployment
